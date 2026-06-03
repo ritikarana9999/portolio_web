@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const LINES = [
@@ -16,21 +16,38 @@ const LINES = [
 export default function LoadingScreen({ onDone }: { onDone: () => void }) {
   const [lines, setLines] = useState<string[]>([]);
   const [done, setDone] = useState(false);
+  const started = useRef(false);
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+
     let i = 0;
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
     const add = () => {
+      if (cancelled) return;
       if (i < LINES.length) {
-        setLines((prev) => [...prev, LINES[i]]);
+        const line = LINES[i];
+        setLines((prev) => [...prev, line]);
         i++;
-        setTimeout(add, 300 + Math.random() * 250);
+        const t = setTimeout(add, 300 + Math.random() * 250);
+        timers.push(t);
       } else {
-        setTimeout(() => setDone(true), 600);
-        setTimeout(onDone, 1200);
+        const t1 = setTimeout(() => { if (!cancelled) setDone(true); }, 600);
+        const t2 = setTimeout(() => { if (!cancelled) onDone(); }, 1200);
+        timers.push(t1, t2);
       }
     };
-    const t = setTimeout(add, 400);
-    return () => clearTimeout(t);
+
+    const t0 = setTimeout(add, 400);
+    timers.push(t0);
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
   }, [onDone]);
 
   return (
@@ -41,7 +58,6 @@ export default function LoadingScreen({ onDone }: { onDone: () => void }) {
           exit={{ opacity: 0, scale: 1.05 }}
           transition={{ duration: 0.5, ease: "easeInOut" }}
         >
-          {/* Scanline overlay */}
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
@@ -56,7 +72,7 @@ export default function LoadingScreen({ onDone }: { onDone: () => void }) {
               <div className="h-px bg-gradient-to-r from-[#c084fc] to-transparent mt-2" />
             </div>
             <div className="space-y-1.5 min-h-[200px]">
-              {lines.map((line, idx) => (
+              {lines.filter(Boolean).map((line, idx) => (
                 <motion.p
                   key={idx}
                   className="font-[family-name:var(--font-vt323)] text-lg"
